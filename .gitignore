@@ -9,6 +9,8 @@
 *.key
 *.p12
 service-account*.json
+google-services.json
+GoogleService-Info.plist
 .DS_Store
 .atom/
 .build/
