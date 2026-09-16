@@ -1,0 +1,136 @@
+// Firestore Security Rules for FeedRe
+// Deploy with: firebase deploy --only firestore:rules
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isUser(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function getUserRole(organizationId) {
+      return get(/databases/$(database)/documents/memberships/$(request.auth.uid + '_' + organizationId)).data.role;
+    }
+
+    function isOrganizationMember(organizationId) {
+      return exists(/databases/$(database)/documents/memberships/$(request.auth.uid + '_' + organizationId));
+    }
+
+    function hasRole(organizationId, role) {
+      return getUserRole(organizationId) == role;
+    }
+
+    function isOwnerOrAdmin(organizationId) {
+      let role = getUserRole(organizationId);
+      return role in ['owner', 'administrator'];
+    }
+
+    function isContextOwnerOrAdmin(contextId) {
+      let contextDoc = get(/databases/$(database)/documents/contexts/$(contextId)).data;
+      return isUser(contextDoc.ownerId) || isOwnerOrAdmin(contextDoc.organizationId);
+    }
+
+    function isReviewerOrAdmin(organizationId) {
+      let role = getUserRole(organizationId);
+      return role in ['owner', 'administrator', 'reviewer'];
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated() && isUser(userId);
+      allow write: if isAuthenticated() && isUser(userId);
+      allow create: if isAuthenticated() && isUser(userId);
+      allow delete: if false; // Require admin deletion
+    }
+
+    // Organizations collection
+    match /organizations/{organizationId} {
+      allow read: if isAuthenticated() && isOrganizationMember(organizationId);
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && isOwnerOrAdmin(organizationId);
+      allow delete: if isAuthenticated() && hasRole(organizationId, 'owner');
+    }
+
+    // Memberships collection
+    match /memberships/{membershipId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read: if isAuthenticated() && isOwnerOrAdmin(resource.data.organizationId);
+      allow create: if isAuthenticated() && isOwnerOrAdmin(resource.data.organizationId);
+      allow update: if isAuthenticated() && (
+        isUser(resource.data.userId) ||
+        isOwnerOrAdmin(resource.data.organizationId)
+      );
+      allow delete: if isAuthenticated() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    // Contexts collection
+    match /contexts/{contextId} {
+      allow read: if isAuthenticated() && isOrganizationMember(resource.data.organizationId);
+      allow create: if isAuthenticated() && isOwnerOrAdmin(request.resource.data.organizationId);
+      allow update: if isAuthenticated() && isContextOwnerOrAdmin(contextId) && (
+        // Only admins/owners can update certain fields
+        (request.resource.data.ownerId == resource.data.ownerId) &&
+        (request.resource.data.organizationId == resource.data.organizationId)
+      );
+      allow delete: if isAuthenticated() && isContextOwnerOrAdmin(contextId);
+    }
+
+    // Responses collection
+    match /responses/{responseId} {
+      // Contributors can see their own responses
+      allow read: if isAuthenticated() && resource.data.contributorId == request.auth.uid;
+      
+      // Admins/Owners can see all responses in their organization
+      allow read: if isAuthenticated() && isOwnerOrAdmin(resource.data.organizationId);
+      
+      // Reviewers can see responses if assigned or in their organization
+      allow read: if isAuthenticated() && (
+        isReviewerOrAdmin(resource.data.organizationId) ||
+        resource.data.assignedTo == request.auth.uid
+      );
+
+      // Contributors can create responses for active contexts
+      allow create: if isAuthenticated() && (
+        request.resource.data.contributorId == request.auth.uid &&
+        request.resource.data.status == 'submitted'
+      );
+
+      // Only contributors can update their own responses (limited fields)
+      allow update: if isAuthenticated() && resource.data.contributorId == request.auth.uid && (
+        request.resource.data.contributorId == resource.data.contributorId &&
+        request.resource.data.contextId == resource.data.contextId &&
+        request.resource.data.submittedAt == resource.data.submittedAt
+      );
+
+      // Admins/Owners can update status and assignments
+      allow update: if isAuthenticated() && isOwnerOrAdmin(resource.data.organizationId);
+
+      // Only admins/owners can delete
+      allow delete: if isAuthenticated() && isOwnerOrAdmin(resource.data.organizationId);
+    }
+
+    // Activity (audit log) collection
+    match /activity/{activityId} {
+      allow read: if isAuthenticated() && isOrganizationMember(resource.data.organizationId);
+      allow create: if isAuthenticated();
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // Aggregates collection
+    match /aggregates/{contextId} {
+      allow read: if isAuthenticated() && (
+        isOrganizationMember(resource.data.organizationId) &&
+        isReviewerOrAdmin(resource.data.organizationId)
+      );
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+  }
+}

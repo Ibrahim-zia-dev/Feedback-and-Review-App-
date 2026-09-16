@@ -1,0 +1,53 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "responses",
+      "fieldPath": "contextId",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "responses",
+      "fieldPath": "organizationId",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "responses",
+      "fieldPath": "contributorId",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "responses",
+      "fieldPath": "status",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "contexts",
+      "fieldPath": "organizationId",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "contexts",
+      "fieldPath": "status",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberships",
+      "fieldPath": "userId",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "memberships",
+      "fieldPath": "organizationId",
+      "ttl": false,
+      "indexes": []
+    }
+  ]
+}
